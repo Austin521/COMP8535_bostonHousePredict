@@ -68,14 +68,24 @@ y = df['MEDV']
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
 # Apply PCA
-pca = PCA(n_components=2)
+# 为PCA应用累积方差，找出需要多少个成分才能达到95%的方差解释
+pca = PCA().fit(X_train)  # 先不限制成分数，以计算所有主成分的方差解释
+cumulative_variance_ratio = np.cumsum(pca.explained_variance_ratio_)
+n_components_pca = np.where(cumulative_variance_ratio >= 0.95)[0][0] + 1  # 加1因为索引从0开始
+
+print(f"Number of PCA components to retain 95% variance: {n_components_pca}")
+
+# 使用所需数量的成分重新应用PCA
+pca = PCA(n_components=n_components_pca)
 X_train_pca = pca.fit_transform(X_train)
 X_test_pca = pca.transform(X_test)
 
 # Apply Kernel PCA
-kpca = KernelPCA(n_components=2, kernel='poly', degree=3)
+kpca = KernelPCA(n_components=n_components_pca, kernel='poly', degree=3)
 X_train_kpca = kpca.fit_transform(X_train)
 X_test_kpca = kpca.transform(X_test)
+
+print(f"Number of Kernel PCA components to retain 95% variance: {n_components_pca}")
 
 # Define models
 models = {
@@ -114,6 +124,15 @@ for model_name, model in models.items():
             'CV R-Squared': cv_r2
         })
 
+        # Plot scatter plot of actual vs predicted values for test data
+        plt.figure(figsize=(10, 6))
+        plt.scatter(y_test, y_pred_test, edgecolor='k', alpha=0.7, s=70)
+        plt.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'k--', lw=3)
+        plt.xlabel('Actual')
+        plt.ylabel('Predicted')
+        plt.title(f'{model_name} with {data_name} Data')
+        plt.show()
+
 # Convert to DataFrame and display results
 results_df = pd.DataFrame(results)
 print(results_df)
@@ -126,62 +145,4 @@ table = ax.table(cellText=results_df.values, colLabels=results_df.columns, cellL
 table.auto_set_font_size(False)
 table.set_fontsize(10)
 table.scale(1.2, 1.2)
-plt.show()
-
-# Calculate and plot feature importance
-model = models['Random Forest']
-model.fit(X_train, y_train)  # Fit the model again with the original data
-importances = model.feature_importances_
-indices = np.argsort(importances)[::-1]
-
-# Ensure feature names match the importance
-feature_names = X.columns  # Use original feature names
-
-sorted_feature_names = [feature_names[i] for i in indices]
-sorted_importances = importances[indices]
-
-# Create a DataFrame for plotting
-importance_df = pd.DataFrame({
-    'Feature': sorted_feature_names,
-    'Importance': sorted_importances
-})
-
-plt.figure(figsize=(12, 6))
-plt.title("Feature Importance")
-sns.barplot(x='Importance', y='Feature', data=importance_df, palette="viridis", hue='Feature', dodge=False, legend=False)
-plt.xlabel('Importance')
-plt.ylabel('Features')
-plt.show()
-
-# Additional Analysis: PCA and Kernel PCA feature importance
-
-# PCA Feature Importance
-pca_components = pca.components_
-pca_importance = np.abs(pca_components).sum(axis=0)
-pca_feature_importance = pd.DataFrame({
-    'Feature': feature_names,
-    'PCA Importance': pca_importance / pca_importance.sum()
-})
-pca_feature_importance = pca_feature_importance.sort_values(by='PCA Importance', ascending=False)
-
-plt.figure(figsize=(12, 6))
-plt.title("PCA Feature Importance")
-sns.barplot(x='PCA Importance', y='Feature', data=pca_feature_importance, hue='Feature', palette="viridis", dodge=False, legend=False)
-plt.xlabel('PCA Importance')
-plt.ylabel('Features')
-plt.show()
-
-# Kernel PCA Feature Importance
-kpca_X_transformed = kpca.transform(X)
-kpca_importance = np.var(kpca_X_transformed, axis=0)
-kpca_feature_importance = pd.DataFrame({
-    'Component': ['PC1', 'PC2'],
-    'Kernel PCA Importance': kpca_importance / kpca_importance.sum()
-})
-
-plt.figure(figsize=(12, 6))
-plt.title("Kernel PCA Component Importance")
-sns.barplot(x='Kernel PCA Importance', y='Component', data=kpca_feature_importance, hue='Component', palette="viridis", dodge=False, legend=False)
-plt.xlabel('Kernel PCA Importance')
-plt.ylabel('Components')
 plt.show()
